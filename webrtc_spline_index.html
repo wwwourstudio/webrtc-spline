@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dual WebRTC Stream</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/adapterjs/7.0.0/adapter.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    #videoContainer {
+      display: flex;
+      justify-content: space-around;
+      width: 100%;
+      margin-top: 20px;
+    }
+    video {
+      width: 45%;
+      border: 2px solid black;
+      margin: 10px;
+    }
+    canvas {
+      display: none;
+    }
+    button {
+      margin-top: 20px;
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h1>Dual WebRTC Stream</h1>
+  <div id="videoContainer">
+    <video id="stream1" autoplay muted playsinline></video>
+    <video id="stream2" autoplay muted playsinline></video>
+    <canvas id="compositeCanvas" style="display: none;"></canvas>
+  </div>
+  <button id="start">Start Streaming</button>
+  <button id="record">Start Recording</button>
+  <button id="stopRecord">Stop Recording</button>
+
+  <script>
+    let mediaStream1, mediaStream2, recorder, chunks = [];
+
+    // Function to setup streams for both video and audio
+    async function setupStreams() {
+      try {
+        mediaStream1 = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        mediaStream2 = await navigator.mediaDevices.getUserMedia({ video: true });
+
+        document.getElementById('stream1').srcObject = mediaStream1;
+        document.getElementById('stream2').srcObject = mediaStream2;
+
+        const canvas = document.getElementById('compositeCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = 1280;
+        canvas.height = 720;
+
+        // Function to draw both video streams onto a single canvas
+        function drawComposite() {
+          ctx.drawImage(document.getElementById('stream1'), 0, 0, canvas.width / 2, canvas.height);
+          ctx.drawImage(document.getElementById('stream2'), canvas.width / 2, 0, canvas.width / 2, canvas.height);
+          requestAnimationFrame(drawComposite); // Keep updating the composite canvas
+        }
+        drawComposite(); // Start the draw loop
+      } catch (error) {
+        console.error('Error setting up streams:', error);
+      }
+    }
+
+    // Start streaming when the "Start Streaming" button is clicked
+    document.getElementById('start').onclick = setupStreams;
+
+    // Start recording the composite stream when the "Start Recording" button is clicked
+    document.getElementById('record').onclick = () => {
+      const canvasStream = document.getElementById('compositeCanvas').captureStream(30); // Capture at 30 FPS
+      recorder = new MediaRecorder(canvasStream);
+
+      // Collect data when available
+      recorder.ondataavailable = (e) => chunks.push(e.data);
+
+      // When recording stops, save the file
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: 'video/webm' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'recorded-stream.webm';
+        a.click(); // Trigger the download
+        chunks = []; // Reset chunks for the next recording
+      };
+
+      recorder.start(); // Start recording
+    };
+
+    // Stop the recording when the "Stop Recording" button is clicked
+    document.getElementById('stopRecord').onclick = () => {
+      if (recorder) {
+        recorder.stop();
+      }
+    };
+  </script>
+</body>
+</html>
